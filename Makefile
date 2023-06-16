@@ -1,9 +1,9 @@
 
-CFLAGS += -I. -Og -g -Wall -Werror
+CFLAGS += -Iinclude -Og -g -Wall -Werror
 
 BUILD_PATH = $(abspath ./build)
 SOURCES = tap.c net_management.c
-HEADERS = tap.h net_management.h
+HEADERS = include/tap.h include/net_management.h
 
 OBJS := $(patsubst %.c, $(BUILD_PATH)/%.o, $(SOURCES))
 
@@ -11,13 +11,10 @@ OBJS := $(patsubst %.c, $(BUILD_PATH)/%.o, $(SOURCES))
 
 all: tap
 
-tap_headers:
-
-
 tap: $(OBJS) $(HEADERS)
 	gcc $(OBJS) $(CFLAGS) -o $@
 
-$(BUILD_PATH)/%.o: %.c
+$(BUILD_PATH)/%.o: %.c include/%.h
 	mkdir -p "$(shell dirname $@)"
 	gcc $< $(CFLAGS) -c -o $@
 
