@@ -12,6 +12,8 @@
 #include <arpa/inet.h>
 #include <linux/if_packet.h>
 
+#include <tap.h>
+#include <net_management.h>
 
 #define BUFFER_SIZE 2048
 
@@ -23,36 +25,6 @@ const char *dev_name;
 // TUN interfaces (IFF_TUN) transport layer 3 (L3) Protocol Data Units (PDUs)
 // TAP interfaces (IFF_TUN) transport layer 2 (L2) PDUs
 
-int create_tap_device(char *dev_name, int flags) {
-    struct ifreq ifr;
-    int err;
-
-    if ((tap_fd = open("/dev/net/tun", O_RDWR)) < 0) {
-        perror("open");
-        return -1;
-    }
-
-    memset(&ifr, 0, sizeof(ifr));
-
-    // ifr_flags field to choose whether to create a TUN (i.e. IP) or a TAP (i.e. Ethernet)
-    ifr.ifr_flags = flags;
-
-
-    // ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
-
-    if (dev_name != NULL) {
-        strncpy(ifr.ifr_name, dev_name, IFNAMSIZ);
-    }
-
-    if ((err = ioctl(tap_fd, TUNSETIFF, (void *)&ifr)) < 0) {
-        perror("ioctl");
-        close(tap_fd);
-        return err;
-    }
-
-    strcpy(dev_name, ifr.ifr_name);
-    return tap_fd;
-}
 
 // Read packets from the TUN/TAP device
 void read_packets(int tap_fd) {
@@ -71,12 +43,12 @@ void read_packets(int tap_fd) {
           printf("%02X ", buffer[i]);
         }
         printf("\n");
-        
+
         struct ethhdr *eth = (struct ethhdr *)(buffer);
         printf("DST: %02X:%02X:%02X:%02X:%02X:%02X\n",eth->h_dest[0],eth->h_dest[1],eth->h_dest[2],eth->h_dest[3],eth->h_dest[4],eth->h_dest[5]);
-        
+
         printf("SRC: %02X:%02X:%02X:%02X:%02X:%02X\n",eth->h_source[0],eth->h_source[1],eth->h_source[2],eth->h_source[3],eth->h_source[4],eth->h_source[5]);
-        
+
     }
 }
 
@@ -90,7 +62,7 @@ void write_packets(int tap_fd, const char *packet, size_t packet_len) {
     }
 }
 
-// function 1: 
+// function 1:
 // input: read from device: read name of device; output: mask & IP
 
 void get_interface_details(const char *interface_name, char *ip_address, char *netmask_address) {
@@ -109,7 +81,7 @@ void get_interface_details(const char *interface_name, char *ip_address, char *n
 
     // Get the IP address
 
-    // ioctl: input and output control, talk to device drivers 
+    // ioctl: input and output control, talk to device drivers
     if (ioctl(sockfd, SIOCGIFADDR, &ifr) < 0) {
         perror("ioctl (SIOCGIFADDR)");
         close(sockfd);
@@ -161,7 +133,7 @@ void get_mac_address(const char *interface_name, char *mac_address) {
     // the MAC address is formatted as a string in the format XX:XX:XX:XX:XX:XX and stored in the mac_address buffer.
     sprintf(mac_address, "%02X:%02X:%02X:%02X:%02X:%02X",
             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-    
+
 
     // Close the socket
     close(sockfd);
@@ -205,7 +177,7 @@ void modify_interface_details(const char *interface_name, const char *new_ip_add
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
-    
+
     // int inet_pton(int af, const char * src, void * dst);
     inet_pton(AF_INET, new_ip_address, &(addr.sin_addr));
 
@@ -378,14 +350,14 @@ int modify_mac_address(const char *interface_name, const char *new_mac_address) 
 void* receive_from_raw_socket(void* arg) {
     char buffer[BUFFER_SIZE];
     ssize_t nread;
-    
+
     while (1) {
         // nread = recv(raw_fd, buffer, sizeof(buffer), 0);
 
         struct sockaddr_ll sa;
         socklen_t sa_len = sizeof(struct sockaddr_ll);
         nread = recvfrom(raw_fd, buffer, sizeof(buffer), 0, (struct sockaddr *)&sa, &sa_len);
-        
+
         if (nread < 0) {
             perror("recv");
 	    continue;
@@ -430,10 +402,10 @@ void* read_from_tap_interface(void* arg) {
 
         // Send the received packet to the raw socket
 
-        // ssize_t nwritten = send(raw_fd, buffer, nread, 0); 
-	
+        // ssize_t nwritten = send(raw_fd, buffer, nread, 0);
+
 	struct ethhdr *eth = (struct ethhdr *)buffer;
-        
+
 	struct sockaddr_ll sa = {
 		.sll_ifindex = if_index.ifr_ifindex,
 		.sll_halen = ETH_ALEN,
@@ -468,7 +440,7 @@ void* read_from_tap_interface(void* arg) {
 
 // Entry point of the program
 int main(int argc, char **argv) {
-    
+
     if ( argc<2 ) {
 	    printf("No device was specified\n");
 	    return -1;
@@ -499,9 +471,8 @@ int main(int argc, char **argv) {
 
     // ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
 
-    if (tap_name!= NULL) {
-        strncpy(ifr.ifr_name, tap_name, IFNAMSIZ);
-    }
+    strncpy(ifr.ifr_name, tap_name, IFNAMSIZ);
+
     if ((err = ioctl(tap_fd, TUNSETIFF, (void *)&ifr)) < 0) {
         perror("ioctl");
         close(tap_fd);
@@ -549,7 +520,7 @@ int main(int argc, char **argv) {
     modify_interface_details("tap0", ip_address, netmask_address);
 
     // -----------------------------------
-    
+
     if (modify_mac_address("tap0", mac_address) == 0) {
         printf("Modified MAC address for tap0\n");
     } else {
@@ -557,7 +528,7 @@ int main(int argc, char **argv) {
     }
 
     // ------------------------------------
-   
+
     const char *interface_name = dev_name;
 
     delete_interface_details(interface_name);
@@ -584,7 +555,7 @@ int main(int argc, char **argv) {
 
     // sa.sll_ifindex = ifr.ifr_ifindex; // index of interface
     sa.sll_ifindex = if_nametoindex(ifr.ifr_name);
-    
+
 /*    if (bind(raw_fd, (struct sockaddr *)&sa, sizeof(struct sockaddr_ll)) < 0) {
         perror("bind");
         close(raw_fd);
@@ -616,7 +587,7 @@ int main(int argc, char **argv) {
     pthread_join(thread1, NULL);
     pthread_join(thread2, NULL);
 
-    
+
     close(raw_fd);
     close(tap_fd);
 
@@ -662,7 +633,7 @@ create functions:
 
 make it a Tun0 -> Tap
 
-5. "Tap0", MAC addr 
+5. "Tap0", MAC addr
 */
 
 /*
@@ -684,13 +655,13 @@ s1: This represents the port or socket number.
 --------------------
 
 
-create a new raw socket and read from tap0 send to raw sockets, 
+create a new raw socket and read from tap0 send to raw sockets,
 multiple threads write/receive tap0
 
-while loop wait message then write 
+while loop wait message then write
 
 thread 1: receive from raw, write to tap - blocking operation
-thread 2: read from tap, send to raw socket 
+thread 2: read from tap, send to raw socket
 
 raw socket - real device
 
