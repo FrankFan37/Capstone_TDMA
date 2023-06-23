@@ -3,11 +3,13 @@
 #include <net/if.h>
 #include <stdlib.h>
 #include <linux/if_packet.h>
+#include <linux/if_tun.h>
+#include <linux/ip.h>
+#include <linux/ipv6.h>
 #include <sys/ioctl.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <unistd.h>
-#include <linux/if_tun.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -274,3 +276,23 @@ int modify_mac_address(const char *interface_name, const char *new_mac_address) 
     return 0;
 }
 
+void print_raw_packet(const char *pkt) {
+    const struct ethhdr *eth = (const struct ethhdr *)pkt;
+    const struct iphdr *ip = (const struct iphdr *)(eth+1);
+    // const struct ipv6hdr *ip6 = (const struct ipv6hdr *)(eth+1);
+    if( ip->version == 4) {
+        printf("Ethernet header:\n\tSource: %02X:%02X:%02X:%02X:%02X:%02X\n\tDestination: %02X:%02X:%02X:%02X:%02X:%02X\n\tType: %04X\n",
+            eth->h_source[0], eth->h_source[1], eth->h_source[2], eth->h_source[3], eth->h_source[4], eth->h_source[5],
+            eth->h_dest[0], eth->h_dest[1], eth->h_dest[2], eth->h_dest[3], eth->h_dest[4], eth->h_dest[5],
+            ntohs(eth->h_proto));
+    }
+    if( ip->version == 4) {
+        printf("IP header:\n\tVersion: %2X\n\tFlow label: %2X\n\tTOS: %02X\n\tTotal length: %04X\n\tID: %04X\n\tFragment offset: %04X\n\tTTL: %02X\n\tProtocol: %02X\n\tSource Address: %u.%u.%u.%u\n\tDestination Address: %u.%u.%u.%u\n",
+            ip->version, ip->ihl, ip->tos, ntohs(ip->tot_len), ntohs(ip->id), ntohs(ip->frag_off), ip->ttl, ip->protocol,
+            (ip->saddr)&0xFF, (ip->saddr>>8)&0xFF, (ip->saddr>>16)&0xFF, (ip->saddr>>24)&0xFF,
+            (ip->daddr)&0xFF, (ip->daddr>>8)&0xFF, (ip->daddr>>16)&0xFF, (ip->daddr>>24)&0xFF );
+    } else {
+        // printf("IPv6 header:\n\tVersion: %2X\n", ip6->version);
+    }
+
+}

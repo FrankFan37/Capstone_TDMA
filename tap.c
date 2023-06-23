@@ -38,7 +38,6 @@ void* receive_from_raw_socket(void* arg) {
 
     while (!terminate) {
         // nread = recv(raw_fd, buffer, sizeof(buffer), 0);
-
         struct sockaddr_ll sa;
         socklen_t sa_len = sizeof(struct sockaddr_ll);
         nread = recvfrom(raw_fd, buffer, sizeof(buffer), 0, (struct sockaddr *)&sa, &sa_len);
@@ -48,13 +47,16 @@ void* receive_from_raw_socket(void* arg) {
 	        continue;
         }
 
+	printf("Receiving: ");
+        print_raw_packet(buffer);
+
         // Write the received packet to the tap interface
         ssize_t nwritten = write(tap_fd, buffer, nread);   // ???
         if (nwritten < 0) {
             perror("write error");
             continue;
         }
-	// printf("Receiving from dev -> tap\n");
+        // printf("Receiving from dev -> tap\n");
     }
 
     printf("Leaving receive thread\n");
@@ -86,19 +88,21 @@ void* read_from_tap_interface(void* arg) {
         // Send the received packet to the raw socket
 
         // ssize_t nwritten = send(raw_fd, buffer, nread, 0);
+	printf("Sending: ");
+        print_raw_packet(buffer);
 
-	struct ethhdr *eth = (struct ethhdr *)buffer;
+        struct ethhdr *eth = (struct ethhdr *)buffer;
 
-	struct sockaddr_ll sa = {
-		.sll_ifindex = if_index.ifr_ifindex,
-		.sll_halen = ETH_ALEN,
-		.sll_addr[0] = eth->h_dest[0],
-		.sll_addr[1] = eth->h_dest[1],
-		.sll_addr[2] = eth->h_dest[2],
-		.sll_addr[3] = eth->h_dest[3],
-		.sll_addr[4] = eth->h_dest[4],
-		.sll_addr[5] = eth->h_dest[5],
-	};
+        struct sockaddr_ll sa = {
+            .sll_ifindex = if_index.ifr_ifindex,
+            .sll_halen = ETH_ALEN,
+            .sll_addr[0] = eth->h_dest[0],
+            .sll_addr[1] = eth->h_dest[1],
+            .sll_addr[2] = eth->h_dest[2],
+            .sll_addr[3] = eth->h_dest[3],
+            .sll_addr[4] = eth->h_dest[4],
+            .sll_addr[5] = eth->h_dest[5],
+        };
 
         ssize_t nwritten = sendto(raw_fd, buffer, nread, 0, (struct sockaddr *) &sa, sizeof(sa));
 
@@ -106,7 +110,7 @@ void* read_from_tap_interface(void* arg) {
             perror("send");
             break;
         }
-	// printf("Sending from tap -> dev\n");
+	    // printf("Sending from tap -> dev\n");
     }
 
     printf("Leaving send hread\n");
@@ -178,14 +182,14 @@ int main(int argc, char **argv) {
     printf("MAC Address: %s\n", mac_address);
     // -----------------------------------
 
-    modify_interface_details("tap0", ip_address, netmask_address);
+    modify_interface_details(tap_name, ip_address, netmask_address);
 
     // -----------------------------------
 
-    if (modify_mac_address("tap0", mac_address) == 0) {
-        printf("Modified MAC address for tap0\n");
+    if (modify_mac_address(tap_name, mac_address) == 0) {
+        printf("Modified MAC address for %s\n", tap_name);
     } else {
-        fprintf(stderr, "Failed to modify MAC address for tap0\n");
+        fprintf(stderr, "Failed to modify MAC address for %s\n", tap_name);
     }
 
     // ------------------------------------
@@ -215,19 +219,17 @@ int main(int argc, char **argv) {
     sa.sll_protocol = htons(ETH_P_ALL);
 
     // sa.sll_ifindex = ifr.ifr_ifindex; // index of interface
-    sa.sll_ifindex = if_nametoindex(tap_name);
-
-/*    if (bind(raw_fd, (struct sockaddr *)&sa, sizeof(struct sockaddr_ll)) < 0) {
+    sa.sll_ifindex = if_nametoindex(dev_name);
+    if (bind(raw_fd, (struct sockaddr *)&sa, sizeof(struct sockaddr_ll)) < 0) {
         perror("bind");
         close(raw_fd);
         close(tap_fd);
         return 1;
     }
-*/
 
-    if (setsockopt(raw_fd, SOL_SOCKET, SO_BINDTODEVICE, dev_name, strlen(dev_name)+1)<0) {
-	    perror("setsockopt BIND TO DEVICE");
-    }
+    // if (setsockopt(raw_fd, SOL_SOCKET, SO_BINDTODEVICE, dev_name, strlen(dev_name)+1)<0) {
+	//     perror("setsockopt BIND TO DEVICE");
+    // }
     // Create thread 1 to receive from raw socket and write to tap interface
     if (pthread_create(&thread1, NULL, receive_from_raw_socket, NULL) != 0) {
         perror("pthread_create (thread1)");
