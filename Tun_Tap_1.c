@@ -6,12 +6,19 @@
 #include <sys/ioctl.h>
 #include <net/if.h>
 #include <linux/if_tun.h>
+#include <pthread.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <linux/if_packet.h>
 
 
 #define BUFFER_SIZE 2048
+
+int tap_fd;
+int raw_fd;
+
+const char* dev_name;
 
 // Create a TUN/TAP device
 
@@ -20,7 +27,7 @@
 
 int create_tap_device(char *dev_name, int flags) {
     struct ifreq ifr;
-    int tap_fd, err;
+    int err;
 
     if ((tap_fd = open("/dev/net/tun", O_RDWR)) < 0) {
         perror("open");
@@ -367,8 +374,97 @@ int modify_mac_address(const char *interface_name, const char *new_mac_address) 
 }
 
 // -----------------------------------
+// multi-threads
+// communication between raw socket and "tap0"
 
+void* receive_from_raw_socket(void* arg) {
+    char buffer[BUFFER_SIZE];
+    ssize_t nread;
 
+    while (1) {
+        // nread = recv(raw_fd, buffer, sizeof(buffer), 0);
+
+        struct sockaddr_ll sa;
+        socklen_t sa_len = sizeof(struct sockaddr_ll);
+        nread = recvfrom(raw_fd, buffer, sizeof(buffer), 0, (struct sockaddr *)&sa, &sa_len);
+        
+        if (nread < 0) {
+            perror("recv");
+            continue;
+            //break;
+        }
+
+        // Write the received packet to the tap interface
+        ssize_t nwritten = write(tap_fd, buffer, nread);   // ???
+        if (nwritten < 0) {
+            perror("write error");
+            //break;
+            continue;
+        }
+        printf("Receiving from dev -> tap\n");
+    }
+
+    printf("Leaving receive thread\n")
+
+    pthread_exit(NULL);
+}
+
+void* read_from_tap_interface(void* arg) {
+    char buffer[BUFFER_SIZE];
+    ssize_t nread;
+
+    struct ifreq if_index={
+        .ifr_name={}
+    };
+    strcpy( if_index.ifr_name, dev_name );
+    if(ioctl(raw_fd, SIOCGIFINDEX, &if_index) < 0) {
+	    perror("ioctl get if index");
+	    return 0;
+    }
+
+    while (1) {
+        nread = read(tap_fd, buffer, sizeof(buffer));
+        if (nread < 0) {
+            perror("read");
+            //break;
+            continue;
+        }
+
+        // Send the received packet to the raw socket
+
+        // ssize_t nwritten = send(raw_fd, buffer, nread, 0); 
+
+        struct ethhdr *eth = (struct ethhdr *)buffer;
+        
+        struct sockaddr_ll sa = {
+            .sll_ifindex = if_index.ifr_ifindex,
+            .sll_halen = ETH_ALEN,
+            .sll_addr[0] = eth->h_dest[0],
+            .sll_addr[1] = eth->h_dest[1],
+            .sll_addr[2] = eth->h_dest[2],
+            .sll_addr[3] = eth->h_dest[3],
+            .sll_addr[4] = eth->h_dest[4],
+            .sll_addr[5] = eth->h_dest[5],
+        };
+
+        ssize_t nwritten = sendto(raw_fd, buffer, nread, 0, (struct sockaddr*) &sa, sizeof(sa));
+
+        if (nwritten < 0) {
+            perror("send");
+            //break;
+            continue;
+        }
+        printf("Sending from tap -> dev\n");
+
+    }
+
+    printf("Leaving send hread\n");
+
+    //close(raw_fd);	
+    //close(tap_fd);
+
+    pthread_exit(NULL);
+}
 
 
 
@@ -380,7 +476,13 @@ int modify_mac_address(const char *interface_name, const char *new_mac_address) 
 
 // Entry point of the program
 int main() {
-    int tap_fd;
+
+    if (argc<2) {
+	    printf("No device was specified\n");
+	    return -1;
+    }
+    dev_name = argv[1];
+    
     char tap_name[IFNAMSIZ] = {0};  // Initialize tap_name
 
     if (geteuid() != 0) {
@@ -388,7 +490,35 @@ int main() {
         return 1;
     }
 
-    tap_fd = create_tap_device(tap_name, IFF_TAP);  // Use IFF_TUN for TUN device
+    // tap_fd = create_tap_device(tap_name, IFF_TAP);  // Use IFF_TUN for TUN device
+
+    struct ifreq ifr;
+    int err;
+
+    if ((tap_fd = open("/dev/net/tun", O_RDWR)) < 0) {
+        perror("open");
+        return -1;
+    }
+
+    memset(&ifr, 0, sizeof(ifr));
+
+    // ifr_flags field to choose whether to create a TUN (i.e. IP) or a TAP (i.e. Ethernet)
+    ifr.ifr_flags = IFF_TAP;
+
+    // ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
+
+    if (tap_name!= NULL) {
+        strncpy(ifr.ifr_name, tap_name, IFNAMSIZ);
+    }
+    if ((err = ioctl(tap_fd, TUNSETIFF, (void *)&ifr)) < 0) {
+        perror("ioctl");
+        close(tap_fd);
+        return err;
+    }
+
+    strcpy(tap_name, ifr.ifr_name);
+
+    // ------------------------
 
     if (tap_fd < 0) {
         fprintf(stderr, "Failed to create TUN/TAP device.\n");
@@ -410,7 +540,7 @@ int main() {
     char ip_address[INET_ADDRSTRLEN];
     char netmask_address[INET_ADDRSTRLEN];
 
-    get_interface_details("enp0s1", ip_address, netmask_address);
+    get_interface_details(dev_name, ip_address, netmask_address);
 
     printf("IP Address: %s\n", ip_address);
     printf("Netmask: %s\n", netmask_address);
@@ -419,7 +549,7 @@ int main() {
 
     // Allocate a buffer to store the MAC address
     char mac_address[18];  // XX:XX:XX:XX:XX:XX + null terminator included -> 17+1
-    get_mac_address("enp0s1", mac_address);
+    get_mac_address(dev_name, mac_address);
 
     printf("MAC Address: %s\n", mac_address);
     // -----------------------------------
@@ -436,22 +566,73 @@ int main() {
 
     // ------------------------------------
    
-    const char *interface_name = "enp0s1";
+    const char *interface_name = dev_name;
 
     delete_interface_details(interface_name);
 
     printf("Deleted interface details for %s\n", interface_name);
 
     // -----------------------------------
+    // multi-threads communication between raw socket and tap0
 
-    read_packets(tap_fd);
+    pthread_t thread1, thread2;
 
+    // Create the raw socket
+    raw_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
+    if (raw_fd < 0) {
+        perror("socket (raw)");
+        close(tap_fd);
+        return 1;
+    }
+
+    struct sockaddr_ll sa;
+    memset(&sa, 0, sizeof(struct sockaddr_ll));
+    sa.sll_family = AF_PACKET;
+    sa.sll_protocol = htons(ETH_P_ALL);
+
+    // sa.sll_ifindex = ifr.ifr_ifindex; // index of interface
+    sa.sll_ifindex = if_nametoindex(ifr.ifr_name);
+    
+    if (bind(raw_fd, (struct sockaddr *)&sa, sizeof(struct sockaddr_ll)) < 0) {
+        perror("bind");
+        close(raw_fd);
+        close(tap_fd);
+        return 1;
+    }
+
+    if (setsockopt(raw_fd, SOL_SOCKET, SO_BINDTODEVICE, dev_name, strlen(dev_name)+1)<0) {
+	    perror("setsockopt BIND TO DEVICE");
+    }
+
+    // Create thread 1 to receive from raw socket and write to tap interface
+    if (pthread_create(&thread1, NULL, receive_from_raw_socket, NULL) != 0) {
+        perror("pthread_create (thread1)");
+        close(raw_fd);
+        close(tap_fd);
+        return 1;
+    }
+
+    // Create thread 2 to read from tap interface and send to raw socket
+    if (pthread_create(&thread2, NULL, read_from_tap_interface, NULL) != 0) {
+        perror("pthread_create (thread2)");
+        close(raw_fd);
+        close(tap_fd);
+        return 1;
+    }
+
+    // Wait for both threads to complete
+    pthread_join(thread1, NULL);
+    pthread_join(thread2, NULL);
+
+    close(raw_fd);
     close(tap_fd);
+
+
     printf("\nProgram terminated.\n");
+    //modify_interface_details(dev_name, ip_address, netmask_address);
 
     return 0;
 }
-
 
 
 /*
