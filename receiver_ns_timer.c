@@ -1,6 +1,9 @@
 /*
 Simple UDP client based on Silver Moon's tutorial
 https://www.binarytides.com/programming-udp-sockets-c-linux/
+
+RECEIVER
+
 */
 #include<stdio.h>	//printf
 #include<string.h> //memset

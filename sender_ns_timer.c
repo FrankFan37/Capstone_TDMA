@@ -8,7 +8,9 @@
 
 #define BUFLEN 512	
 #define PORT 8888	
-#define SLEEP_NS 100000000000 // 1 second in nanoseconds
+#define SLEEP_NS 1000000000UL // 1 second in nanoseconds
+
+// SENDER
 
 void die(char *s)
 {
@@ -67,13 +69,16 @@ int main(void)
 
 		// Sleep for the specified frequency in nanoseconds until a new message is received
 		struct timespec sleep_time;
-
-		sleep_time.tv_sec = 0;
-		sleep_time.tv_nsec = SLEEP_NS;
+        size_t time_ns = SLEEP_NS;
+		sleep_time.tv_sec = time_ns/1000000000UL;
+		sleep_time.tv_nsec = time_ns%1000000000UL;
 
 		while (recvfrom(s, buf, BUFLEN, MSG_DONTWAIT, (struct sockaddr *)&si_other, &slen) == -1)
 		{
 		    printf("Sleep a bit...\n");
+
+            printf(sleep_time.tv_sec);
+            printf(sleep_time.tv_nsec);
 
 			nanosleep(&sleep_time, NULL);
 			
@@ -90,3 +95,23 @@ int main(void)
 	close(s);
 	return 0;
 }
+
+/*
+
+1-(up to 1500) bytes -> usual limit for ethernet packetß
+
+congirgurable interval and amount of information (number of bytes)
+
+long option --<word>: 
+./prog --dest 192.168.10.1 --interval 10000 --payload-size 250
+
+short option:
+./prog -i 10000 -p 250 -d 192.168.10.1
+
+
+send packets with configurable interval and size - SENDER
+
+
+
+
+*/
