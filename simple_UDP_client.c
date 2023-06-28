@@ -56,11 +56,15 @@ int main(void)
 		{
 			die("sendto()");
 		}
-		
+
+	
 		//receive a reply and print it
 		//clear the buffer by filling null, it might have previously received data
 		memset(buf,'\0', BUFLEN);
 		//try to receive some data, this is a blocking call
+
+		printf("Receving random numbers from server...\n");
+
 		if (recvfrom(s, buf, BUFLEN, 0, (struct sockaddr *) &si_other, &slen) == -1)
 		{
 			die("recvfrom()");
@@ -72,3 +76,14 @@ int main(void)
 	close(s);
 	return 0;
 }
+
+/*
+
+run client:
+
+$ gcc simple_UDP_client.c -o simple_UDP_client
+$ ./simple_UDP_client
+
+Enter message:
+
+*/

@@ -10,6 +10,8 @@ https://www.binarytides.com/programming-udp-sockets-c-linux/
 #include<arpa/inet.h>
 #include<sys/socket.h>
 #include<unistd.h>  // close()
+#include<time.h>
+
 
 // hold data being sent or received over a network socket
 // acts as a temporary storage area for the data being transferred
@@ -45,6 +47,7 @@ int main(void)
 	
 	int s, i, slen = sizeof(si_other) , recv_len;
 	char buf[BUFLEN];
+	char send_buf[BUFLEN]; // Buffer for sending random numbers
 	
 	//create a UDP(User Datagram Protocol) socket (datagram sockets; not connection oriented, unreliable communication); another type is TCP
 
@@ -87,12 +90,13 @@ int main(void)
 		die("bind");
 	}
 
+	srand(time(NULL)); // Seed the random number generator
 
 
     //keep listening for data
     while(1)
 	{
-		printf("Waiting for data...");
+		printf("Waiting for data...\n");
 		fflush(stdout);  // clear the output buffer ???
 		
 		//try to receive some data, this is a blocking call
@@ -113,9 +117,22 @@ int main(void)
         */
 		printf("Received packet from %s:%d\n", inet_ntoa(si_other.sin_addr), ntohs(si_other.sin_port));
 		printf("Data: %s\n" , buf);
+
+
+		// Generate random numbers 
+		int random_num1 = rand();
+		int random_num2 = rand();
+
+		// DEBUG:
+		// printf("Random Numbers: %d, %d\n", random_num1, random_num2);
+
+		// Prepare the buffer to send back
+		snprintf(send_buf, sizeof(send_buf), "Random Numbers: %d, %d", random_num1, random_num2);
+
+
 		
 		//now reply the client with the same data
-		if (sendto(s, buf, recv_len, 0, (struct sockaddr*) &si_other, slen) == -1)
+		if (sendto(s, send_buf, strlen(send_buf), 0, (struct sockaddr*) &si_other, slen) == -1)
 		{
 			die("sendto()");
 		}
@@ -126,6 +143,16 @@ int main(void)
 
 
 
-
-
 }
+
+/*
+
+run server:
+
+$ gcc simple_UDP_server.c -o simple_UDP_server
+$ ./simple_UDP_server
+
+Waiting for data...
+
+
+*/
