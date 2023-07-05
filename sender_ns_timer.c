@@ -5,6 +5,8 @@
 #include <sys/socket.h>
 #include <unistd.h>  
 #include <time.h>
+#include <getopt.h> // Added for command-line option parsing
+
 
 #define BUFLEN 512	
 #define PORT 8888	
@@ -18,14 +20,28 @@ void die(char *s)
 	exit(1);
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
 	struct sockaddr_in si_me, si_other; // si_other: sender
 	int s, i, slen = sizeof(si_other), recv_len;
 	char buf[BUFLEN];
-	char send_buf[BUFLEN]; // Buffer for sending random numbers
+	char send_buf[BUFLEN]; // Buffer for sending counter
 
-	
+	unsigned long interval_ns = SLEEP_NS;
+
+	int opt;
+    while ((opt = getopt_long(argc, argv, "",
+            (struct option[]){ {"interval-ns", required_argument, NULL, 'n'}, {NULL, 0, NULL, 0} }, NULL)) != -1)
+    {
+        switch (opt)
+        {
+            case 'n':
+                interval_ns = atol(optarg);
+                break;
+            default:
+                exit(1);
+        }
+    }
 
 	if ((s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
 	{
@@ -73,7 +89,7 @@ int main(void)
 
 		// Sleep for the specified frequency in nanoseconds until a new message is received
 		struct timespec sleep_time;
-        size_t time_ns = SLEEP_NS;
+        size_t time_ns = interval_ns;
 		sleep_time.tv_sec = time_ns/1000000000UL;
 		sleep_time.tv_nsec = time_ns%1000000000UL;
 
