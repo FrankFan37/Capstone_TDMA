@@ -81,3 +81,10 @@ int main(void)
 	close(s);
 	return 0;
 }
+
+/*
+
+gcc simple_UDP_client.c -o simple_UDP_client
+./simple_UDP_client
+
+*/

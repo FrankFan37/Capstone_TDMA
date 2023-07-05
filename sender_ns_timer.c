@@ -8,9 +8,10 @@
 #include <getopt.h> // Added for command-line option parsing
 
 
-#define BUFLEN 512	
+#define DEFAULT_BUFLEN 512	
 #define PORT 8888	
 #define SLEEP_NS 1000000000UL // 1 second in nanoseconds
+#define MAX_PACKET_SIZE_LIMIT 1500
 
 // SENDER
 
@@ -24,24 +25,41 @@ int main(int argc, char *argv[])
 {
 	struct sockaddr_in si_me, si_other; // si_other: sender
 	int s, i, slen = sizeof(si_other), recv_len;
-	char buf[BUFLEN];
-	char send_buf[BUFLEN]; // Buffer for sending counter
+
+	char buf[DEFAULT_BUFLEN];
+	char send_buf[DEFAULT_BUFLEN]; // Buffer for sending counter
 
 	unsigned long interval_ns = SLEEP_NS;
+	size_t max_packet_size = DEFAULT_BUFLEN; // unsigned integral 
 
 	int opt;
     while ((opt = getopt_long(argc, argv, "",
-            (struct option[]){ {"interval-ns", required_argument, NULL, 'n'}, {NULL, 0, NULL, 0} }, NULL)) != -1)
+            (struct option[]){ {"interval-ns", required_argument, NULL, 'n'}, {"max-packet-size", required_argument, NULL, 's'}, {NULL, 0, NULL, 0} }, NULL)) != -1)
     {
         switch (opt)
         {
             case 'n':
                 interval_ns = atol(optarg);
                 break;
+			case 's':
+				max_packet_size = atol(optarg);
+				break;
             default:
                 exit(1);
         }
     }
+
+
+
+	if (max_packet_size > MAX_PACKET_SIZE_LIMIT)
+    {
+        printf("Error: Max packet size exceeds the limit of 1500 bytes.\n");
+
+		// the program does not execute successfully and there is some error
+        return 1;
+    }
+
+
 
 	if ((s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
 	{
@@ -71,7 +89,7 @@ int main(int argc, char *argv[])
 		printf("Waiting for data...\n");
 		fflush(stdout);
 
-		if ((recv_len = recvfrom(s, buf, BUFLEN, 0, (struct sockaddr *)&si_other, &slen)) == -1)
+		if ((recv_len = recvfrom(s, buf, max_packet_size, 0, (struct sockaddr *)&si_other, &slen)) == -1)
 		{
 			die("recvfrom()");
 		}
@@ -93,7 +111,7 @@ int main(int argc, char *argv[])
 		sleep_time.tv_sec = time_ns/1000000000UL;
 		sleep_time.tv_nsec = time_ns%1000000000UL;
 
-		while (recvfrom(s, buf, BUFLEN, MSG_DONTWAIT, (struct sockaddr *)&si_other, &slen) == -1)
+		while (recvfrom(s, buf, max_packet_size, MSG_DONTWAIT, (struct sockaddr *)&si_other, &slen) == -1)
 		{
 		    printf("Sleep a bit...\n");
 
@@ -119,6 +137,11 @@ int main(int argc, char *argv[])
 }
 
 /*
+
+gcc simple_UDP_server.c -o simple_UDP_server
+./simple_UDP_server --interval-ns 2000000000 --max-packet-size 1024
+
+
 
 1-(up to 1500) bytes -> usual limit for ethernet packetß
 
