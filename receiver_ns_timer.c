@@ -66,7 +66,7 @@ int main(void)
 		memset(buf,'\0', BUFLEN);
 		//try to receive some data, this is a blocking call
 		
-		printf("Receving random numbers from server...\n");
+		//printf("Receving random numbers from server...\n");
 		
 		if (recvfrom(s, buf, BUFLEN, 0, (struct sockaddr *) &si_other, &slen) == -1)
 		{

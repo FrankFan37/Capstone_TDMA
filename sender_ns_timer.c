@@ -25,6 +25,8 @@ int main(void)
 	char buf[BUFLEN];
 	char send_buf[BUFLEN]; // Buffer for sending random numbers
 
+	
+
 	if ((s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
 	{
 		die("socket");
@@ -41,10 +43,12 @@ int main(void)
 		die("bind");
 	}
 
-	srand(time(NULL)); // Seed the random number generator
+	//srand(time(NULL)); // Seed the random number generator
 
-	int random_num1 = rand();
-	int random_num2 = rand();
+	//int random_num1 = rand();
+	//int random_num2 = rand();
+
+	int send_count = 0;
 
 	while (1)
 	{
@@ -60,7 +64,7 @@ int main(void)
 		printf("Data: %s\n", buf);
 
 		// Prepare the buffer to send back
-		snprintf(send_buf, sizeof(send_buf), "Random Numbers: %d, %d", random_num1, random_num2);
+		snprintf(send_buf, sizeof(send_buf), "Send Count: %d", send_count);
 
 		if (sendto(s, send_buf, strlen(send_buf), 0, (struct sockaddr *)&si_other, slen) == -1)
 		{
@@ -77,8 +81,12 @@ int main(void)
 		{
 		    printf("Sleep a bit...\n");
 
-            printf(sleep_time.tv_sec);
-            printf(sleep_time.tv_nsec);
+            //printf(sleep_time.tv_sec);
+            //printf(sleep_time.tv_nsec);
+
+			send_count += 1;
+
+			snprintf(send_buf, sizeof(send_buf), "Send Count: %d", send_count);
 
 			nanosleep(&sleep_time, NULL);
 			
@@ -88,8 +96,6 @@ int main(void)
 			}
 		}
 
-		random_num1 = rand(); // Generate new random numbers for the next message
-		random_num2 = rand();
 	}
 
 	close(s);
